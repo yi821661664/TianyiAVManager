@@ -32,9 +32,10 @@ TODO: Add long description of the pod here.
 
   s.source_files = 'TianyiAVManager/Classes/**/*'
   
-  # s.resource_bundles = {
-  #   'TianyiAVManager' => ['TianyiAVManager/Assets/*.png']
-  # }
+  s.resource_bundles = {
+    'TianyiAVManager' => ['TianyiAVManager/Assets/*']
+  }
+  s.dependency 'TianyiUIEngine'
 
   # s.public_header_files = 'Pod/Classes/**/*.h'
   # s.frameworks = 'UIKit', 'MapKit'
