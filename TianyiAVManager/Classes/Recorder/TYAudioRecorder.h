@@ -18,19 +18,23 @@ typedef enum : NSUInteger {
 
 @interface TYAudioRecorder : NSObject
 
++ (instancetype)shared;
+
 /// 录音方式
 @property(nonatomic, assign) TYAudioRecordType recordType;
 /// 是否正在录音
 @property(nonatomic, assign) BOOL isRecording;
 /// 录音声道，默认双声道
-@property(nonatomic, assign) NSInteger chanle;
+@property(nonatomic, assign) UInt32 channel;
 /// 采样率，默认44.1kHz
+@property(nonatomic, assign) UInt32 sampleRate;
 /// 位深，默认16
+@property(nonatomic, assign) UInt32 bits;
 
 /// 开始录音
--(void)start;
+-(void)startRecord;
 /// 停止录音
--(void)stop;
+-(void)stopRecord;
 
 @end
 

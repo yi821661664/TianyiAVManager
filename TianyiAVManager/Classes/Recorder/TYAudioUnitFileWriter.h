@@ -1,28 +1,26 @@
 //
-//  TYAudioQueueRecorder.h
+//  TYAudioUnitFileWriter.h
 //  TianyiAVManager
 //
-//  Created by 易召强 on 2022/11/14.
+//  Created by 易召强 on 2022/11/15.
 //
 
 #import <Foundation/Foundation.h>
+#import <AVFoundation/AVFoundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface TYAudioQueueRecorder : NSObject
+@interface TYAudioUnitFileWriter : NSObject
+
+@property(copy, nonatomic) NSString* filePath;
 
 - (instancetype)initWithSampleRate:(UInt32)sampleRate
                     bitsPerChannel:(UInt32)bitsPerChannel
                   channelsPerFrame:(UInt32)channelsPerFrame
                     bytesPerPacket:(UInt32)bytesPerPacket;
-
-@property(nonatomic,copy) NSString *filePath;
-@property(nonatomic,assign) BOOL isRecording;
-//开始播放
-- (void)startRecord;
-//停止播放
-- (void)stopRecord;
-
+- (void)openFileWithFilePath:(NSString *)filePath;
+- (void)writeData:(void *)data length:(int)length;
+- (void)closeFile;
 
 @end
 
