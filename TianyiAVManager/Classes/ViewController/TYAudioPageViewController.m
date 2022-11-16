@@ -7,7 +7,7 @@
 
 #import "TYAudioPageViewController.h"
 #import "TYAudioRecorder.h"
-//#import "TYAudioPlayer.h"
+#import "TYAudioPlayer.h"
 //#import "TYAudioRecorder.h"
 
 //音频波形图
@@ -249,45 +249,33 @@ typedef enum : NSUInteger {
 }
 
 - (void)playDemoBtnOnClick:(UIButton *)sender {
-//    NSString *path = nil;
-//    TYAudioPlayerType type = ty_player_type_system;
-//    switch (self.demoType) {
-//        case TYAudioPageDemoType_demoAcc:
-//            path = [[NSBundle mainBundle] pathForResource:@"ty_audio_demo" ofType:@"aac"];
-//            break;
-//        case TYAudioPageDemoType_demoMp3:
-//            path = [[NSBundle mainBundle] pathForResource:@"ty_audio_gnypmfys" ofType:@"mp3"];
-//            type = ty_player_type_audioUnit;   // 这个需要单声道
-//            break;
-//        case TYAudioPageDemoType_demoCaf:
-//            path = [[NSBundle mainBundle] pathForResource:@"ty_audio_zqf" ofType:@"caf"];
-//            type = ty_player_type_audioQueue;  // 这个需要双声道
-//            break;
-//        default:
-//            break;
-//    }
-//
-//    if (path == nil) {
-//        return;
-//    }
-//    [sender setTitle:@"正在播放示例" forState:UIControlStateNormal];
-//    sender.enabled = NO;
-//    sender.alpha = 0.5;
-//    if (self.demoType == TYAudioPageDemoType_demoCaf && type == ty_player_type_audioQueue) {
-//        [TYAudioPlayer playAudioWith:path type:type channel:Channel_2 complete:^{
-//            NSLog(@"播放音频完成");
-//            [sender setTitle:@"播放示例音频" forState:UIControlStateNormal];
-//            sender.enabled = YES;
-//            sender.alpha = 1;
-//        }];
-//    } else {
-//        [TYAudioPlayer playAudioWith:path type:type complete:^{
-//            NSLog(@"播放音频完成");
-//            [sender setTitle:@"播放示例音频" forState:UIControlStateNormal];
-//            sender.enabled = YES;
-//            sender.alpha = 1;
-//        }];
-//    }
+    NSString *path = nil;
+    switch (self.demoType) {
+        case TYAudioPageDemoType_demoAcc:
+//            path = [TYBaseTool getFileP];
+            break;
+        case TYAudioPageDemoType_demoMp3:
+            path = [[NSBundle mainBundle] pathForResource:@"告五人 - 爱人错过" ofType:@"mp3"];
+            break;
+        case TYAudioPageDemoType_demoCaf:
+            path = [[NSBundle mainBundle] pathForResource:@"ty_audio_zqf" ofType:@"caf"];
+            break;
+        default:
+            break;
+    }
+
+    if (path == nil) {
+        return;
+    }
+    [sender setTitle:@"正在播放示例" forState:UIControlStateNormal];
+    sender.enabled = NO;
+    sender.alpha = 0.5;
+    [TYAudioPlayer playAudioWith:path type:TYAudioPlayType_system finish:^{
+        NSLog(@"播放完成");
+        [sender setTitle:@"播放示例音频" forState:UIControlStateNormal];
+        sender.enabled = YES;
+        sender.alpha = 1;
+    }];
 }
 
 #pragma mark - lazy init
