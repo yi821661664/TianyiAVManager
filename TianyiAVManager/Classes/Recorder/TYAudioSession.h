@@ -13,7 +13,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)setPlayAndRecord;
 + (void)setPlayback;
-+ (void)setSampleRate:(double)sampleRate duration:(double)duration;
 
 @end
 

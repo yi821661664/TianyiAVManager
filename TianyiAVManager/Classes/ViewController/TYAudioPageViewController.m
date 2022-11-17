@@ -8,7 +8,7 @@
 #import "TYAudioPageViewController.h"
 #import "TYAudioRecorder.h"
 #import "TYAudioPlayer.h"
-//#import "TYAudioRecorder.h"
+#import "TYAudioRecorder.h"
 
 //音频波形图
 //变声处理
@@ -34,6 +34,7 @@ typedef enum : NSUInteger {
 @property(nonatomic, strong) UIButton *decordBtn;  // 解码按钮
 @property(nonatomic, strong) UIButton *playPCMBtn; // 播放PCM数据
 
+@property(nonatomic, assign) BOOL demoPlaying;
 @property(nonatomic, assign) TYAudioRecordType recordType;
 @property(nonatomic, assign) TYAudioPageDemoType demoType;
 @property(nonatomic, assign) TYAudioPageDecordType decordtype;
@@ -41,7 +42,6 @@ typedef enum : NSUInteger {
 @property(nonatomic, strong) NSArray <NSString *>*audioDemoArr;
 @property(nonatomic, strong) NSArray <NSString *>*audioDecordArr;
 @property(nonatomic, strong) NSMutableArray <UIButton *>*btnsArr;
-//@property(nonatomic, strong) TYAudioRecorder *recorder;
 @property(nonatomic, copy)   NSString *recordPcmPath;
 
 @end
@@ -52,7 +52,7 @@ typedef enum : NSUInteger {
     [super viewDidLoad];
     self.title = @"音频编码与解码";
     self.recordTypeArr = @[@"系统高级Api录音",@"AudioUnit录音",@"AudioQueue录音"];
-    self.audioDemoArr = @[@"示例AAC音频",@"示例MP3音频",@"示例CAF音频流"];
+    self.audioDemoArr = @[@"示例AAC音频",@"示例MP3音频",@"示例CAF音频"];
     self.audioDecordArr = @[@"示例AAC音频->PCM",@"录音AAC音频->PCM"];
     self.btnsArr = @[].mutableCopy;
     
@@ -111,16 +111,16 @@ typedef enum : NSUInteger {
         make.left.mas_equalTo(lastV);
     }];
 
-//    NSString *paths = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
-//    self.recordPcmPath = [paths stringByAppendingPathComponent:[NSString stringWithFormat:@"audioRecord/%@",kPcmFileName]];
-//    NSFileManager *fileManager = [NSFileManager defaultManager];
-//    if ([fileManager fileExistsAtPath:self.recordPcmPath]) {
-//        _playRecordBtn.enabled = YES;
-//        _playRecordBtn.alpha = 1;
-//    } else {
-//        _playRecordBtn.enabled = NO;
-//        _playRecordBtn.alpha = 0.5;
-//    }
+    NSString *directory = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) lastObject];
+    _recordPcmPath = [directory stringByAppendingPathComponent:@"TYRecord/record.pcm"];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    if ([fileManager fileExistsAtPath:self.recordPcmPath]) {
+        _playRecordBtn.enabled = YES;
+        _playRecordBtn.alpha = 1;
+    } else {
+        _playRecordBtn.enabled = NO;
+        _playRecordBtn.alpha = 0.5;
+    }
 }
 
 - (void)dealloc {
@@ -208,13 +208,19 @@ typedef enum : NSUInteger {
 }
 
 - (void)playPCMBtnOnClick:(UIButton *)sender {
-    
+//    NSString *path = [TYBaseTool getFilePath:@"audio/my_test" type:@"pcm" bundleName:@"TianyiAVManager"];
+//    if (path.length <= 0) {
+//        return;
+//    }
+//    [TYAudioPlayer playAudioWith:path type:TYAudioPlayType_audioUnit finish:^{
+//
+//    }];
 }
 
 - (void)recordBtnOnClick:(UIButton *)sender {
-//    if (!self.recorder.recoding) {
-//        _playRecordBtn.enabled = NO;
-//        _playRecordBtn.alpha = 0.5;
+    if (!TYAudioRecorder.shared.isRecording) {
+        _playRecordBtn.enabled = NO;
+        _playRecordBtn.alpha = 0.5;
 //        switch (self.recordType) {
 //            case TYAudioPageRecordType_system:
 //                self.recorder.recordType = ty_record_type_audioUnit;
@@ -228,14 +234,15 @@ typedef enum : NSUInteger {
 //            default:
 //                break;
 //        }
-//        [self.recorder start];
-//        [self.recordBtn setTitle:@"停止录音" forState:UIControlStateNormal];
-//    } else {
-//        _playRecordBtn.enabled = YES;
-//        _playRecordBtn.alpha = 1;
-//        [self.recorder stop];
-//        [self.recordBtn setTitle:@"开始录音" forState:UIControlStateNormal];
-//    }
+        TYAudioRecorder.shared.recordType = TYAudioRecordType_audioUnit;
+        [TYAudioRecorder.shared startRecord];
+        [self.recordBtn setTitle:@"停止录音" forState:UIControlStateNormal];
+    } else {
+        _playRecordBtn.enabled = YES;
+        _playRecordBtn.alpha = 1;
+        [TYAudioRecorder.shared stopRecord];
+        [self.recordBtn setTitle:@"开始录音" forState:UIControlStateNormal];
+    }
 }
 
 - (void)decordBtnOnClick:(UIButton *)sender {
@@ -243,22 +250,22 @@ typedef enum : NSUInteger {
 }
 
 - (void)playRecordBtnOnClick:(UIButton *)sender {
-//    [TYAudioPlayer playAudioWith:self.recordPcmPath type:ty_player_type_audioUnit channel:Channel_1 complete:^{
-//        NSLog(@"播放音频完成");
-//    }];
+    [TYAudioPlayer playAudioWith:_recordPcmPath type:TYAudioPlayType_audioUnit finish:^{
+
+    }];
 }
 
 - (void)playDemoBtnOnClick:(UIButton *)sender {
     NSString *path = nil;
     switch (self.demoType) {
         case TYAudioPageDemoType_demoAcc:
-//            path = [TYBaseTool getFileP];
+            path = [TYBaseTool getFilePath:@"audio/告五人 - 爱人错过" type:@"mp3" bundleName:@"TianyiAVManager"];
             break;
         case TYAudioPageDemoType_demoMp3:
-            path = [[NSBundle mainBundle] pathForResource:@"告五人 - 爱人错过" ofType:@"mp3"];
+            path = [TYBaseTool getFilePath:@"audio/告五人 - 爱人错过" type:@"mp3" bundleName:@"TianyiAVManager"];
             break;
         case TYAudioPageDemoType_demoCaf:
-            path = [[NSBundle mainBundle] pathForResource:@"ty_audio_zqf" ofType:@"caf"];
+            path = [TYBaseTool getFilePath:@"audio/告五人 - 爱人错过" type:@"mp3" bundleName:@"TianyiAVManager"];
             break;
         default:
             break;
@@ -267,15 +274,20 @@ typedef enum : NSUInteger {
     if (path == nil) {
         return;
     }
-    [sender setTitle:@"正在播放示例" forState:UIControlStateNormal];
-    sender.enabled = NO;
-    sender.alpha = 0.5;
-    [TYAudioPlayer playAudioWith:path type:TYAudioPlayType_system finish:^{
-        NSLog(@"播放完成");
+    if (!self.demoPlaying) {
+        self.demoPlaying = YES;
+        [sender setTitle:@"停播示例音频" forState:UIControlStateNormal];
+        __weak typeof(self)weakSelf = self;
+        [TYAudioPlayer playAudioWith:path type:TYAudioPlayType_system finish:^{
+            NSLog(@"播放完成");
+            [sender setTitle:@"播放示例音频" forState:UIControlStateNormal];
+            weakSelf.demoPlaying = NO;
+        }];
+    } else {
         [sender setTitle:@"播放示例音频" forState:UIControlStateNormal];
-        sender.enabled = YES;
-        sender.alpha = 1;
-    }];
+        self.demoPlaying = NO;
+        [TYAudioPlayer stopAllAuido];
+    }
 }
 
 #pragma mark - lazy init

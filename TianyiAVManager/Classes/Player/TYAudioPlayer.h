@@ -21,9 +21,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface TYAudioPlayer : NSObject
 
++ (TYAudioPlayer *)shared;
+
 + (void)playAudioWith:(NSString *)path type:(TYAudioPlayType)type finish:(TYAudioPlayerFinishBlock)finish;
 
 + (void)playAudioWith:(NSString *)path type:(TYAudioPlayType)type progress:(TYAudioPlayerProgressBlock)progress finish:(TYAudioPlayerFinishBlock)finish;
+
++ (void)stopAllAuido;
 
 @end
 

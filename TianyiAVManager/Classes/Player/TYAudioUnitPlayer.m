@@ -6,122 +6,207 @@
 //
 
 #import "TYAudioUnitPlayer.h"
-#import "TYAudioPlayer.h"
+#import <AudioUnit/AudioUnit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <assert.h>
+#import <TianyiUIEngine/TYBaseTool.h>
+
+const uint32_t CONST_BUFFER_SIZE = 0x10000;
+
+#define INPUT_BUS 1
+#define OUTPUT_BUS 0
 
 @interface TYAudioUnitPlayer()
 
-@property (nonatomic, assign) AUGraph graph;
-@property (nonatomic, assign) AUNode ioNode;
-@property (nonatomic, assign) AudioUnit ioUnit;
-@property (nonatomic, assign) AudioStreamBasicDescription asbd;
-@property (nonatomic, assign) AudioComponentDescription ioDesc;
-@property (nonatomic) dispatch_queue_t queue;
+@property(nonatomic, copy) NSString *filePath;
 
 @end
 
 @implementation TYAudioUnitPlayer
+{
+    AudioUnit audioUnit;
+    AudioBufferList *buffList;
+    NSInputStream *inputSteam;
+}
 
-- (instancetype)initWithAsbd:(AudioStreamBasicDescription)asbd {
+- (void)play {
+    [self initPlayer];
+    AudioOutputUnitStart(audioUnit);
+}
+
+
+- (double)getCurrentTime {
+    Float64 timeInterval = 0;
+    if (inputSteam) {
+        
+    }
+    
+    return timeInterval;
+}
+
+- (instancetype)initWithAudioFilePath:(NSString *)audioFilePath {
     self = [super init];
     if (self) {
-        _asbd = asbd;
-        _queue = dispatch_queue_create("ty.audioPlayer", DISPATCH_QUEUE_SERIAL);
-        [self setupDescription];
-        [self getAudioUnits];
-        [self setupAudioUnits];
+        _filePath = audioFilePath;
     }
     return self;
 }
-- (void)setupDescription {
-    _ioDesc.componentType = kAudioUnitType_Output;
-    _ioDesc.componentSubType = kAudioUnitSubType_RemoteIO;
-    _ioDesc.componentManufacturer = kAudioUnitManufacturer_Apple;
-    _ioDesc.componentFlags = 0;
-    _ioDesc.componentFlagsMask = 0;
-}
-- (void)getAudioUnits {
-    OSStatus status = NewAUGraph(&_graph);
-    CheckError(status, "create graph");
-    status = AUGraphAddNode(_graph, &_ioDesc, &_ioNode);
-    CheckError(status, "create ioNote");
+
+
+- (void)initPlayer {
+    // open pcm stream
+    NSURL *url = [NSURL fileURLWithPath:_filePath];
+    inputSteam = [NSInputStream inputStreamWithURL:url];
+    if (!inputSteam) {
+        NSLog(@"打开文件失败 %@", url);
+    }
+    else {
+        [inputSteam open];
+    }
     
-    status = AUGraphOpen(_graph);
-    CheckError(status, "open graph");
+    NSError *error = nil;
+    OSStatus status = noErr;
     
-    status = AUGraphNodeInfo(_graph, _ioNode, NULL, &_ioUnit);
-    CheckError(status, "get ioNode reference");
-}
-- (void)setupAudioUnits {
-    OSStatus status;
-    //设置io输入格式
-    status = AudioUnitSetProperty(_ioUnit,
+    // set audio session
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    [audioSession setCategory:AVAudioSessionCategoryPlayback error:&error];
+    
+    AudioComponentDescription audioDesc;
+    audioDesc.componentType = kAudioUnitType_Output;
+    audioDesc.componentSubType = kAudioUnitSubType_RemoteIO;
+    audioDesc.componentManufacturer = kAudioUnitManufacturer_Apple;
+    audioDesc.componentFlags = 0;
+    audioDesc.componentFlagsMask = 0;
+    
+    AudioComponent inputComponent = AudioComponentFindNext(NULL, &audioDesc);
+    AudioComponentInstanceNew(inputComponent, &audioUnit);
+    
+    // buffer
+    buffList = (AudioBufferList *)malloc(sizeof(AudioBufferList));
+    buffList->mNumberBuffers = 1;
+    buffList->mBuffers[0].mNumberChannels = 1;
+    buffList->mBuffers[0].mDataByteSize = CONST_BUFFER_SIZE;
+    buffList->mBuffers[0].mData = malloc(CONST_BUFFER_SIZE);
+    
+    //audio property
+    UInt32 flag = 1;
+    if (flag) {
+        status = AudioUnitSetProperty(audioUnit,
+                                      kAudioOutputUnitProperty_EnableIO,
+                                      kAudioUnitScope_Output,
+                                      OUTPUT_BUS,
+                                      &flag,
+                                      sizeof(flag));
+    }
+    if (status) {
+        NSLog(@"AudioUnitSetProperty error with status:%d", status);
+    }
+    
+    // format
+    AudioStreamBasicDescription outputFormat;
+    memset(&outputFormat, 0, sizeof(outputFormat));
+    outputFormat.mSampleRate       = 48000; // 采样率
+    outputFormat.mFormatID         = kAudioFormatLinearPCM; // PCM格式
+    outputFormat.mFormatFlags      = kLinearPCMFormatFlagIsSignedInteger; // 整形
+    outputFormat.mFramesPerPacket  = 1; // 每帧只有1个packet
+    outputFormat.mChannelsPerFrame = 2; // 声道数
+    outputFormat.mBytesPerFrame    = 2; // 每帧只有2个byte 声道*位深*Packet数
+    outputFormat.mBytesPerPacket   = 2; // 每个Packet只有2个byte
+    outputFormat.mBitsPerChannel   = 16; // 位深
+    [self printAudioStreamBasicDescription:outputFormat];
+
+    status = AudioUnitSetProperty(audioUnit,
                                   kAudioUnitProperty_StreamFormat,
                                   kAudioUnitScope_Input,
-                                  0,
-                                  &_asbd,
-                                  sizeof(_asbd));
-    CheckError(status, "set ioUnit StreamFormat");
+                                  OUTPUT_BUS,
+                                  &outputFormat,
+                                  sizeof(outputFormat));
+    if (status) {
+        NSLog(@"AudioUnitSetProperty eror with status:%d", status);
+    }
     
-    NSTimeInterval bufferDuration = 0.02;
-    NSError *error;
-    [[AVAudioSession sharedInstance] setPreferredIOBufferDuration:bufferDuration error:&error];
     
-    //设置输入回调
-    AURenderCallbackStruct rcbs;
-    rcbs.inputProc = &InputRenderCallback;
-    rcbs.inputProcRefCon = (__bridge void *_Nullable)(self);
-    status =  AudioUnitSetProperty(_ioUnit,
-                                   kAudioUnitProperty_SetRenderCallback,
-                                   kAudioUnitScope_Input,
-                                   0,
-                                   &rcbs,
-                                   sizeof(rcbs));
-    CheckError(status, "set render callback");
+    // callback
+    AURenderCallbackStruct playCallback;
+    playCallback.inputProc = PlayCallback;
+    playCallback.inputProcRefCon = (__bridge void *)self;
+    AudioUnitSetProperty(audioUnit,
+                         kAudioUnitProperty_SetRenderCallback,
+                         kAudioUnitScope_Input,
+                         OUTPUT_BUS,
+                         &playCallback,
+                         sizeof(playCallback));
+    
+    
+    OSStatus result = AudioUnitInitialize(audioUnit);
+    NSLog(@"result %d", result);
 }
-- (void)startPlay {
-    dispatch_async(_queue, ^{
-        OSStatus status;
-        status = AUGraphInitialize(self.graph);
-        CheckError(status, "AUGraphInitialize");
-        status = AUGraphStart(self.graph);
-        CheckError(status, "AUGraphStart");
-    });
-}
-- (void)stopPlay {
-    dispatch_async(_queue, ^{
-        OSStatus status;
-        status = AUGraphStop(self.graph);
-        CheckError(status, "AUGraphStop");
-        status = AUGraphUninitialize(self.graph);
-        CheckError(status, "AUGraphUninitialize");
-    });
-}
-static OSStatus InputRenderCallback(void *inRefCon,
-                                    AudioUnitRenderActionFlags *ioActionFlags,
-                                    const AudioTimeStamp *inTimeStamp,
-                                    UInt32 inBusNumber,
-                                    UInt32 inNumberFrames,
-                                    AudioBufferList *ioData) {
+
+
+static OSStatus PlayCallback(void *inRefCon,
+                             AudioUnitRenderActionFlags *ioActionFlags,
+                             const AudioTimeStamp *inTimeStamp,
+                             UInt32 inBusNumber,
+                             UInt32 inNumberFrames,
+                             AudioBufferList *ioData) {
     TYAudioUnitPlayer *player = (__bridge TYAudioUnitPlayer *)inRefCon;
-    [player.dataSource readDataToBuffer:ioData length:inNumberFrames];
+    
+    ioData->mBuffers[0].mDataByteSize = (UInt32)[player->inputSteam read:ioData->mBuffers[0].mData maxLength:(NSInteger)ioData->mBuffers[0].mDataByteSize];;
+    NSLog(@"out size: %d", ioData->mBuffers[0].mDataByteSize);
+    
+    if (ioData->mBuffers[0].mDataByteSize <= 0) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [player stop];
+        });
+    }
     return noErr;
 }
 
-static void CheckError(OSStatus error, const char *operation)
-{
-    if (error == noErr) return;
-    char errorString[20];
-    // See if it appears to be a 4-char-code
-    *(UInt32 *)(errorString + 1) = CFSwapInt32HostToBig(error);
-    if (isprint(errorString[1]) && isprint(errorString[2]) && isprint(errorString[3]) && isprint(errorString[4])) {
-        errorString[0] = errorString[5] = '\'';
-        errorString[6] = '\0';
-    } else {
-        // No, format it as an integer
-        sprintf(errorString, "%d", (int)error);
-        fprintf(stderr, "Error: %s (%s)\n", operation, errorString);
+
+- (void)stop {
+    AudioOutputUnitStop(audioUnit);
+    if (buffList != NULL) {
+        if (buffList->mBuffers[0].mData) {
+            free(buffList->mBuffers[0].mData);
+            buffList->mBuffers[0].mData = NULL;
+        }
+        free(buffList);
+        buffList = NULL;
+    }
+    
+    if (self.delegate && [self.delegate respondsToSelector:@selector(onPlayToEnd:)]) {
+        __strong typeof (TYAudioUnitPlayer) *player = self;
+        [self.delegate onPlayToEnd:player];
+    }
+    
+    [inputSteam close];
+}
+
+- (void)dealloc {
+    AudioOutputUnitStop(audioUnit);
+    AudioUnitUninitialize(audioUnit);
+    AudioComponentInstanceDispose(audioUnit);
+    
+    if (buffList != NULL) {
+        free(buffList);
+        buffList = NULL;
     }
 }
 
+
+- (void)printAudioStreamBasicDescription:(AudioStreamBasicDescription)asbd {
+    char formatID[5];
+    UInt32 mFormatID = CFSwapInt32HostToBig(asbd.mFormatID);
+    bcopy (&mFormatID, formatID, 4);
+    formatID[4] = '\0';
+    printf("Sample Rate:         %10.0f\n",  asbd.mSampleRate);
+    printf("Format ID:           %10s\n",    formatID);
+    printf("Format Flags:        %10X\n",    (unsigned int)asbd.mFormatFlags);
+    printf("Bytes per Packet:    %10d\n",    (unsigned int)asbd.mBytesPerPacket);
+    printf("Frames per Packet:   %10d\n",    (unsigned int)asbd.mFramesPerPacket);
+    printf("Bytes per Frame:     %10d\n",    (unsigned int)asbd.mBytesPerFrame);
+    printf("Channels per Frame:  %10d\n",    (unsigned int)asbd.mChannelsPerFrame);
+    printf("Bits per Channel:    %10d\n",    (unsigned int)asbd.mBitsPerChannel);
+    printf("\n");
+}
 @end

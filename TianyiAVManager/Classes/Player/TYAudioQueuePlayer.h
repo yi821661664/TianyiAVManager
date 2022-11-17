@@ -11,10 +11,15 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface TYAudioQueuePlayer : NSObject
 
-- (instancetype)initWithChannel:(UInt32)channel;
-- (void)start;
+- (instancetype)initWithAudioFilePath:(NSString *)audioFilePath;
+
+- (void)startPlay;
+
+- (void)llystartPlay;
+
+- (void)pause;
+
 - (void)stop;
-- (void)putAudioData:(void *)data length:(UInt32)length;
 
 @end
 

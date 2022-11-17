@@ -8,7 +8,6 @@
 #import "TYAudioRecorder.h"
 #import "TYAudioSession.h"
 #import "TYAudioUnitRecorder.h"
-#import "TYAudioUnitFileWriter.h"
 #import "TYAudioQueueRecorder.h"
 
 @interface TYAudioRecorder()<TYAudioUnitRecorderDelegate,AVAudioRecorderDelegate>
@@ -18,7 +17,6 @@
 @property(nonatomic, strong) AVAudioRecorder *audioRecorder;  // 系统高级Api
 @property(nonatomic, strong) TYAudioUnitRecorder *audiounitRecorder;  // audioUnit
 @property(nonatomic, strong) TYAudioQueueRecorder *audioQueueRecorder; // audioqueue
-@property(nonatomic, strong) TYAudioUnitFileWriter *audiounitFileWriter;
 
 @end
 
@@ -41,8 +39,8 @@
         _channel = 2;
         NSString *directory = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) lastObject];
         _pcmFilePath = [NSString stringWithFormat:@"%@/TYRecord", directory];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:_pcmFilePath]) {
-            [[NSFileManager defaultManager] createFileAtPath:_pcmFilePath contents:nil attributes:nil];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:_pcmFilePath]) {
+            [[NSFileManager defaultManager] createDirectoryAtPath:_pcmFilePath withIntermediateDirectories:YES attributes:nil error:nil];
         }
     }
     return self;
@@ -55,9 +53,11 @@
     [TYAudioSession setPlayAndRecord];
     _isRecording = YES;
     if (_audiounitRecorder) {
-        [_audiounitRecorder stopRecord];
+        [_audiounitRecorder stop];
     }
-    _filePath =  [NSString stringWithFormat:@"%@/test.pcm", _pcmFilePath];
+    _filePath =  [NSString stringWithFormat:@"%@/record.pcm", _pcmFilePath];
+    [[NSFileManager defaultManager] removeItemAtPath:_filePath error:nil];
+    [[NSFileManager defaultManager] createFileAtPath:_filePath contents:nil attributes:nil];
     if (_recordType == TYAudioRecordType_system) {
         if (!_audioRecorder) {
             _filePath =  [NSString stringWithFormat:@"%@/test.caf", _pcmFilePath];
@@ -76,12 +76,10 @@
         }
     } else if (_recordType == TYAudioRecordType_audioUnit) {
         if (!_audiounitRecorder) {
-            _audiounitRecorder = [[TYAudioUnitRecorder alloc] initWithPitchShift:0 sampleRate:_sampleRate bitsPerChannel:_bits channelsPerFrame:_channel bytesPerPacket:1];
+            _audiounitRecorder = [[TYAudioUnitRecorder alloc] init];
             _audiounitRecorder.delegate = self;
-            _audiounitFileWriter = [[TYAudioUnitFileWriter alloc] initWithSampleRate:_sampleRate bitsPerChannel:_bits channelsPerFrame:_channel bytesPerPacket:1];
         }
-        [TYAudioSession setSampleRate:_sampleRate duration:0.02];
-        [_audiounitFileWriter openFileWithFilePath:_filePath];
+        [_audiounitRecorder start];
     } else {
         if (!_audioQueueRecorder) {
             _audioQueueRecorder = [[TYAudioQueueRecorder alloc] initWithSampleRate:_sampleRate bitsPerChannel:_bits channelsPerFrame:_channel bytesPerPacket:1];
@@ -98,7 +96,7 @@
             [_audioRecorder stop];
         }
     } else if (_recordType == TYAudioRecordType_audioUnit) {
-        [_audiounitRecorder stopRecord];
+        [_audiounitRecorder stop];
     } else {
         if (_audioQueueRecorder.isRecording) {
             [_audioQueueRecorder stopRecord];
@@ -117,8 +115,16 @@
 }
 
 #pragma mark - audioUnitRecorder delegate
-- (void)audioRecorder:(TYAudioUnitRecorder *)audioRecorder didRecoredAudioData:(void *)data length:(unsigned int)length {
-    [_audiounitFileWriter writeData:data length:length];
+- (void)audioRecorder:(TYAudioUnitRecorder *)audioRecorder didRecoredbufferList:(AudioBufferList *)bufferList {
+    AudioBuffer audioBuffer = bufferList->mBuffers[0];// 左耳机buffer
+    NSData *audioData = [NSData dataWithBytes:audioBuffer.mData length:audioBuffer.mDataByteSize];
+    NSFileHandle * fileHandle = [NSFileHandle fileHandleForWritingAtPath:_filePath];
+    if(fileHandle == nil) {
+        return;
+    }
+    [fileHandle seekToEndOfFile];
+    [fileHandle writeData:audioData];
+    [fileHandle closeFile];
 }
 
 #pragma  mark - AVAudioRecorderDelegate

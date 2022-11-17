@@ -5,230 +5,280 @@
 //  Created by 易召强 on 2022/11/14.
 //
 
+//AudioUnitSetParameter(self.ioUnit, kNewTimePitchParam_Pitch, kAudioUnitScope_Global, 0, self.pitchShift, 0);
+
 #import "TYAudioUnitRecorder.h"
 
-@interface TYAudioUnitRecorder()
+#pragma mark --audioEncodeParam
+#define kAudioEncodeSampleRate                      48000
+#define kAudioEncodeBitsPerChannel                  16
+#define kAudioEncodeChannelCount                    2
+#define kAudioEncodeBitrate                         128 * 1000
 
-@property (nonatomic) dispatch_queue_t queue;
-@property (nonatomic) AudioStreamBasicDescription asbd;
-@property (nonatomic) AUGraph graph;
-@property (nonatomic) AudioUnit ioUnit;
-@property (nonatomic) AudioComponentDescription ioUnitDesc;
-@property (nonatomic, assign) Float32 pitchShift;
-@property (nonatomic, assign) UInt32 channelsPerFrame;
+@interface TYAudioUnitRecorder() {
+    AudioUnit audioUnit;
+    BOOL audioComponentInitialized;
+}
+@property (nonatomic,assign) AudioStreamBasicDescription inputStreamDesc;
+
+@property (nonatomic) dispatch_queue_t encoderQueue;
+@property (nonatomic) dispatch_queue_t callbackQueue;
+
+@property (assign, nonatomic) double SampleRate;
+@property (assign, nonatomic) double BitsPerChannel;
+@property (assign, nonatomic) UInt32 ChannelCount;
 
 @end
 
 @implementation TYAudioUnitRecorder
 
-- (instancetype)initWithAsbd:(AudioStreamBasicDescription)asbd{
+- (instancetype)init {
     self = [super init];
     if (self) {
-        _asbd = asbd;
-        _queue = dispatch_queue_create("ty.audioRecorder", DISPATCH_QUEUE_SERIAL);
-        [self setupAcd];
-        dispatch_async(_queue, ^{
-//            [self createInputUnit];
-            [[NSUserDefaults standardUserDefaults] setObject:@(self.channelsPerFrame) forKey:@"mChannelsPerFrame"];
-            [[NSUserDefaults standardUserDefaults] synchronize];
-            [self getAudioUnits];
-            [self setupAudioUnits];
-        });
+        self = [super init];
+        if (self) {
+            [self defaultSetting];
+        }
+        return self;
     }
     return self;
 }
-- (instancetype)initWithPitchShift:(Float32)pitchShift
-                        sampleRate:(UInt32)sampleRate
-                    bitsPerChannel:(UInt32)bitsPerChannel
-                  channelsPerFrame:(UInt32)channelsPerFrame
-                    bytesPerPacket:(UInt32)bytesPerPacket {
-    AudioStreamBasicDescription asbd = {0};
-    asbd.mSampleRate = sampleRate;
-    asbd.mFormatID = kAudioFormatLinearPCM;
-    asbd.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked;
-    asbd.mBytesPerPacket = channelsPerFrame * 2;
-    asbd.mFramesPerPacket = bytesPerPacket;
-    asbd.mBytesPerFrame = channelsPerFrame * 2;
-    asbd.mChannelsPerFrame = channelsPerFrame;
-    asbd.mBitsPerChannel = channelsPerFrame;
-    _asbd = asbd;
-    self.pitchShift = pitchShift;
-    return [self initWithAsbd:_asbd];
-}
-- (void)setupAcd {
-    _ioUnitDesc.componentType = kAudioUnitType_Output;
-    //vpio模式
-    _ioUnitDesc.componentSubType = kAudioUnitSubType_VoiceProcessingIO;
-    _ioUnitDesc.componentManufacturer = kAudioUnitManufacturer_Apple;
-    _ioUnitDesc.componentSubType = kAudioUnitSubType_NewTimePitch;
-    _ioUnitDesc.componentType = kAudioUnitType_FormatConverter;
-    _ioUnitDesc.componentFlags = 0;
-    _ioUnitDesc.componentFlagsMask = 0;
-}
-- (void)getAudioUnits {
-    OSStatus status = NewAUGraph(&_graph);
-    printf("create graph %d \n", (int)status);
-    
-    AUNode ioNode;
-    status = AUGraphAddNode(_graph, &_ioUnitDesc, &ioNode);
-    printf("add ioNote %d \n", (int)status);
 
-    //instantiate the audio units
-    status = AUGraphOpen(_graph);
-    printf("open graph %d \n", (int)status);
-    
-    //obtain references to the audio unit instances
-    status = AUGraphNodeInfo(_graph, ioNode, NULL, &_ioUnit);
-    printf("get ioUnit %d \n", (int)status);
-    
-    //处理变声
-    if (self.pitchShift != 0) {
-        AudioUnitSetParameter(self.ioUnit, kNewTimePitchParam_Pitch, kAudioUnitScope_Global, 0, self.pitchShift, 0);
-    }
+- (void)defaultSetting{
+    self.encoderQueue = dispatch_queue_create("AAC Encoder Queue", DISPATCH_QUEUE_SERIAL);
+    self.callbackQueue = dispatch_queue_create("AAC Encoder Callback Queue", DISPATCH_QUEUE_SERIAL);
+    self.SampleRate = kAudioEncodeSampleRate;
+    self.BitsPerChannel = kAudioEncodeBitsPerChannel;
+    self.ChannelCount = kAudioEncodeChannelCount;
+    OSStatus status = [self prepareRecord:kAudioEncodeSampleRate];
+    CheckError(status, "prepareRecord failed");
 }
-- (void)createInputUnit {
-    AudioComponent comp = AudioComponentFindNext(NULL, &_ioUnitDesc);
-    if (comp == NULL) {
-        printf("can't get AudioComponent");
-    }
-    OSStatus status = AudioComponentInstanceNew(comp, &(_ioUnit));
-    printf("creat audio unit %d \n", (int)status);
-}
-- (void)setupAudioUnits {
-    OSStatus status;
-    //音频输入默认是关闭的，需要开启 0:关闭，1:开启
-    UInt32 enableInput = 1; // to enable input
-    UInt32 propertySize;
-    status = AudioUnitSetProperty(_ioUnit,
-                                  kAudioOutputUnitProperty_EnableIO,
-                                  kAudioUnitScope_Input,
-                                  1,
-                                  &enableInput,
-                                  sizeof(enableInput));
-    printf("enable input %d \n", (int)status);
-    
-    //关闭音频输出
-    UInt32 disableOutput = 0; // to disable output
-    status = AudioUnitSetProperty(_ioUnit,
-                                  kAudioOutputUnitProperty_EnableIO,
-                                  kAudioUnitScope_Output,
-                                  0,
-                                  &disableOutput,
-                                  sizeof(disableOutput));
-    printf("disable output %d \n", (int)status);
-    
-    //设置stram format
-    propertySize = sizeof (AudioStreamBasicDescription);
-    status = AudioUnitSetProperty(_ioUnit,
-                                  kAudioUnitProperty_StreamFormat,
-                                  kAudioUnitScope_Output,
-                                  1,
-                                  &_asbd,
-                                  propertySize);
-    printf("set input format %d \n", (int)status);
-    //检查是否设置成功
-    AudioStreamBasicDescription deviceFormat;
-    status = AudioUnitGetProperty(_ioUnit,
-                                  kAudioUnitProperty_StreamFormat,
-                                  kAudioUnitScope_Output,
-                                  1,
-                                  &deviceFormat,
-                                  &propertySize);
-    printf("get input format %d \n", (int)status);
-    
-    //设置最大采集帧数
-    UInt32 maxFramesPerSlice = 4096;
-    propertySize = sizeof(UInt32);
-    status = AudioUnitSetProperty(_ioUnit,
-                                  kAudioUnitProperty_MaximumFramesPerSlice,
-                                  kAudioUnitScope_Global,
-                                  0,
-                                  &maxFramesPerSlice,
-                                  propertySize);
-    printf("set max frame per slice: %d, %d \n", (int)maxFramesPerSlice, (int)status);
-    AudioUnitGetProperty(_ioUnit,
-                         kAudioUnitProperty_MaximumFramesPerSlice,
-                         kAudioUnitScope_Global,
-                         0,
-                         &maxFramesPerSlice,
-                         &propertySize);
-    printf("get max frame per slice: %d, %d \n", (int)maxFramesPerSlice, (int)status);
-    
-    //设置回调
-    AURenderCallbackStruct callbackStruct;
-    callbackStruct.inputProc = &inputCallback;
-    callbackStruct.inputProcRefCon = (__bridge void *_Nullable)(self);
-    
-    status = AudioUnitSetProperty(_ioUnit,
-                                  kAudioOutputUnitProperty_SetInputCallback,
-                                  kAudioUnitScope_Input,
-                                  0,
-                                  &callbackStruct,
-                                  sizeof(callbackStruct));
-    printf("set render callback %d \n", (int)status);
-}
-- (void)startRecord {
-    dispatch_async(_queue, ^{
-        OSStatus status;
-        status = AUGraphInitialize(self.graph);
-        printf("AUGraphInitialize %d \n", (int)status);
-        status = AUGraphStart(self.graph);
-        printf("AUGraphStart %d \n", (int)status);
-    });
-}
-- (void)stopRecord {
-    dispatch_async(_queue, ^{
-        OSStatus status;
-        status = AUGraphStop(self.graph);
-        printf("AUGraphStop %d \n", (int)status);
-    });
-}
-OSStatus inputCallback(void *inRefCon,
-                       AudioUnitRenderActionFlags *ioActionFlags,
-                       const AudioTimeStamp *inTimeStamp,
-                       UInt32 inBusNumber,
-                       UInt32 inNumberFrames,
-                       AudioBufferList *__nullable ioData) {
-
-    TYAudioUnitRecorder *recorder = (__bridge TYAudioUnitRecorder *)inRefCon;
-
-    AudioBuffer buffer;
-    
-    /**
-     on this point we define the number of channels, which is mono
-     for the iphone. the number of frames is usally 512 or 1024.
-     */
-    UInt32 size = inNumberFrames * recorder.asbd.mBytesPerFrame;
-    NSString *obj = [[NSUserDefaults standardUserDefaults] objectForKey:@"mChannelsPerFrame"];
-    UInt32 mChannelsPerFrame = 2;
-    if (obj != nil) {
-        mChannelsPerFrame = (UInt32)[obj integerValue];
-    }
-    
-    buffer.mDataByteSize = size; // sample size
-    buffer.mNumberChannels = mChannelsPerFrame; // one channel
-    buffer.mData = malloc(size); // buffer size
-    
-    // we put our buffer into a bufferlist array for rendering
-    AudioBufferList bufferList;
-    bufferList.mNumberBuffers = 1;
-    bufferList.mBuffers[0] = buffer;
-    
+- (OSStatus)prepareRecord:(double)sampleRate {
     OSStatus status = noErr;
     
-    status = AudioUnitRender(recorder.ioUnit, ioActionFlags, inTimeStamp, 1, inNumberFrames, &bufferList);
+    if (!audioComponentInitialized) {
+        audioComponentInitialized = YES;
+        // 描述音频组件
+        AudioComponentDescription audioComponentDescription;
+        audioComponentDescription.componentType = kAudioUnitType_Output;
+        audioComponentDescription.componentSubType = kAudioUnitSubType_VoiceProcessingIO; // 降噪
+        audioComponentDescription.componentManufacturer = kAudioUnitManufacturer_Apple;
+        audioComponentDescription.componentFlags = 0;
+        audioComponentDescription.componentFlagsMask = 0;
+        
+        // 查找音频单元
+        AudioComponent remoteIOComponent = AudioComponentFindNext(NULL, &audioComponentDescription);
+        // 创建音频单元实例
+        status = AudioComponentInstanceNew(remoteIOComponent, &(self->audioUnit));
+        if (CheckError(status, "Couldn't get RemoteIO unit instance")) {
+            return status;
+        }
+    }
     
-    if (status != noErr) {
-        printf("AudioUnitRender %d \n", (int)status);
+    UInt32 oneFlag = 1;
+    AudioUnitElement bus0 = 0;
+    AudioUnitElement bus1 = 1;
+    
+    if ((NO)) {
+        // Configure the RemoteIO unit for playback
+        status = AudioUnitSetProperty (self->audioUnit,
+                                       kAudioOutputUnitProperty_EnableIO,
+                                       kAudioUnitScope_Output,
+                                       bus0,
+                                       &oneFlag,
+                                       sizeof(oneFlag));
+        if (CheckError(status, "Couldn't enable RemoteIO output")) {
+            return status;
+        }
+    }
+    
+    // Configure the RemoteIO unit for input
+    status = AudioUnitSetProperty(self->audioUnit,
+                                  kAudioOutputUnitProperty_EnableIO,
+                                  kAudioUnitScope_Input,
+                                  bus1,
+                                  &oneFlag,
+                                  sizeof(oneFlag));
+    if (CheckError(status, "Couldn't enable RemoteIO input")) {
         return status;
     }
-    if ([recorder.delegate respondsToSelector:@selector(audioRecorder:didRecoredAudioData:length:)]) {
-        [recorder.delegate audioRecorder:recorder didRecoredAudioData:buffer.mData length:buffer.mDataByteSize];
+    // 音频流基础描述
+    AudioStreamBasicDescription asbd = {0};
+    asbd.mSampleRate = self.SampleRate;//采样率
+    asbd.mFormatID = kAudioFormatLinearPCM;//原始数据为PCM格式
+    asbd.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    asbd.mChannelsPerFrame = self.ChannelCount;//每帧的声道数量
+    asbd.mFramesPerPacket = 1;//每个数据包多少帧
+    asbd.mBitsPerChannel = self.BitsPerChannel;//16位
+    asbd.mBytesPerFrame = asbd.mChannelsPerFrame * asbd.mBitsPerChannel / 8;//每帧多少字节 bytes -> bit / 8
+    asbd.mBytesPerPacket = asbd.mFramesPerPacket * asbd.mBytesPerFrame;//每个包多少字节
+    
+    // Set format for output (bus 0) on the RemoteIO's input scope
+    status = AudioUnitSetProperty(self->audioUnit,
+                                  kAudioUnitProperty_StreamFormat,
+                                  kAudioUnitScope_Input,
+                                  bus0,
+                                  &asbd,
+                                  sizeof(asbd));
+    if (CheckError(status, "Couldn't set the ASBD for RemoteIO on input scope/bus 0")) {
+        return status;
     }
-    free(buffer.mData);
+    
+    // Set format for mic input (bus 1) on RemoteIO's output scope
+    status = AudioUnitSetProperty(self->audioUnit,
+                                  kAudioUnitProperty_StreamFormat,
+                                  kAudioUnitScope_Output,
+                                  bus1,
+                                  &asbd,
+                                  sizeof(asbd));
+    if (CheckError(status, "Couldn't set the ASBD for RemoteIO on output scope/bus 1")) {
+        return status;
+    }
+    
+    // Set the recording callback
+    AURenderCallbackStruct callbackStruct;
+    callbackStruct.inputProc = inputCallBackFun;
+    callbackStruct.inputProcRefCon = (__bridge void *) self;
+    status = AudioUnitSetProperty(self->audioUnit,
+                                  kAudioOutputUnitProperty_SetInputCallback,
+                                  kAudioUnitScope_Global,
+                                  bus1,
+                                  &callbackStruct,
+                                  sizeof (callbackStruct));
+    if (CheckError(status, "Couldn't set RemoteIO's render callback on bus 0")) {
+        return status;
+    }
+    
+    if ((NO)) {
+        // Set the playback callback
+        AURenderCallbackStruct callbackStruct;
+        callbackStruct.inputProc = playbackCallback;
+        callbackStruct.inputProcRefCon = (__bridge void *) self;
+        status = AudioUnitSetProperty(self->audioUnit,
+                                      kAudioUnitProperty_SetRenderCallback,
+                                      kAudioUnitScope_Global,
+                                      bus0,
+                                      &callbackStruct,
+                                      sizeof (callbackStruct));
+        if (CheckError(status, "Couldn't set RemoteIO's render callback on bus 0")) {
+            return status;
+        }
+    }
+    
+    // Initialize the RemoteIO unit
+    status = AudioUnitInitialize(self->audioUnit);
+    if (CheckError(status, "Couldn't initialize the RemoteIO unit")) {
+        return status;
+    }
     
     return status;
 }
+static OSStatus CheckError(OSStatus error, const char *operation) {
+  if (error == noErr) {
+    return error;
+  }
+  char errorString[20] = "";
+  // See if it appears to be a 4-char-code
+  *(UInt32 *)(errorString + 1) = CFSwapInt32HostToBig(error);
+  if (isprint(errorString[1]) && isprint(errorString[2]) &&
+      isprint(errorString[3]) && isprint(errorString[4])) {
+    errorString[0] = errorString[5] = '\'';
+    errorString[6] = '\0';
+  } else {
+    // No, format it as an integer
+    sprintf(errorString, "%d", (int)error);
+  }
+  fprintf(stderr, "Error: %s (%s)\n", operation, errorString);
+  return error;
+}
+static OSStatus playbackCallback(void *inRefCon,
+                                 AudioUnitRenderActionFlags *ioActionFlags,
+                                 const AudioTimeStamp *inTimeStamp,
+                                 UInt32 inBusNumber,
+                                 UInt32 inNumberFrames,
+                                 AudioBufferList *ioData) {
+  OSStatus status = noErr;
 
+  // Notes: ioData contains buffers (may be more than one!)
+  // Fill them up as much as you can. Remember to set the size value in each buffer to match how
+  // much data is in the buffer.
+    TYAudioUnitRecorder *recorder = (__bridge TYAudioUnitRecorder *) inRefCon;
+
+  UInt32 bus1 = 1;
+  status = AudioUnitRender(recorder->audioUnit,
+                           ioActionFlags,
+                           inTimeStamp,
+                           bus1,
+                           inNumberFrames,
+                           ioData);
+  CheckError(status, "Couldn't render from RemoteIO unit");
+  return status;
+}
+
+static OSStatus inputCallBackFun(void *inRefCon,
+                    AudioUnitRenderActionFlags *ioActionFlags,
+                    const AudioTimeStamp *inTimeStamp,
+                    UInt32 inBusNumber,
+                    UInt32 inNumberFrames,
+                    AudioBufferList * __nullable ioData)
+{
+    TYAudioUnitRecorder *recorder = (__bridge TYAudioUnitRecorder *)(inRefCon);
+    
+    AudioBufferList bufferList;
+    /*
+    bufferList.mNumberBuffers = recorder.ChannelCount;
+    for (UInt32 i = 0; i < recorder.ChannelCount; i++) {
+        AudioBuffer buffer;
+        buffer.mData = NULL;
+        buffer.mDataByteSize = 0;
+        buffer.mNumberChannels = 1;
+        bufferList.mBuffers[i] = buffer;
+    }
+    */
+    bufferList.mNumberBuffers = 1;
+    AudioBuffer buffer;
+    buffer.mData = NULL;
+    buffer.mDataByteSize = 0;
+    buffer.mNumberChannels = recorder.ChannelCount;
+    bufferList.mBuffers[0] = buffer;
+    
+    AudioUnitRender(recorder->audioUnit,
+                    ioActionFlags,
+                    inTimeStamp,
+                    inBusNumber,
+                    inNumberFrames,
+                    &bufferList);
+    if (recorder.delegate && [recorder.delegate respondsToSelector:@selector(audioRecorder:didRecoredbufferList:)]) {
+        [recorder.delegate audioRecorder:recorder didRecoredbufferList:&bufferList];
+    }
+    
+    return noErr;
+}
+
+- (void)start {
+    [self deleteAudioFile];
+    OSStatus status = AudioOutputUnitStart(audioUnit);
+    CheckError(status, "AudioOutputUnitStart failed");
+    _isRecording = YES;
+}
+
+- (void)stop {
+    CheckError(AudioOutputUnitStop(audioUnit),
+    "AudioOutputUnitStop failed");
+    _isRecording = NO;
+}
+
+- (void)deleteAudioFile {
+    NSString *pcmPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"record.mp3"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:pcmPath]) {
+        [[NSFileManager defaultManager] removeItemAtPath:pcmPath error:nil];
+    }
+}
+
+- (void)dealloc {
+    CheckError(AudioComponentInstanceDispose(audioUnit),
+               "AudioComponentInstanceDispose failed");
+    NSLog(@"UnitRecorder销毁");
+}
 
 @end

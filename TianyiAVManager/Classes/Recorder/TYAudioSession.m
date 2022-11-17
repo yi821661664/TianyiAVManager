@@ -40,17 +40,7 @@
     result = [audioSession setActive:YES error:&sessionError];
     printf("setActive %d \n", result);
 }
-+ (void)setSampleRate:(double)sampleRate duration:(double)duration {
-    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
-    NSError *sessionError;
-    BOOL result;
-    result = [audioSession setPreferredIOBufferDuration:duration error:&sessionError];
-    printf("setIOBufferDuration %d \n", result);
-    result = [audioSession setPreferredSampleRate:sampleRate error:&sessionError];
-    printf("setSampleRate %d \n", result);
-    result = [audioSession setActive:YES error:&sessionError];
-    printf("setActive %d \n", result);
-}
+
 - (void)beginObserver {
     AVAudioSession *audioSession = [AVAudioSession sharedInstance];
     [[NSNotificationCenter defaultCenter] addObserver:self

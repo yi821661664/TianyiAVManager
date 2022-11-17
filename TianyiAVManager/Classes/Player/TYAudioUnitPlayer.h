@@ -6,24 +6,23 @@
 //
 
 #import <Foundation/Foundation.h>
-#import <AudioToolbox/AudioToolbox.h>
-
-@protocol TYAudioUnitPlayerDataSourse <NSObject>
-
-- (void)readDataToBuffer:(AudioBufferList *_Nonnull)ioData length:(UInt32)inNumberFrames;
-
-@end
 
 NS_ASSUME_NONNULL_BEGIN
 
+
+@class TYAudioUnitPlayer;
+@protocol TYPlayerDelegate <NSObject>
+
+- (void)onPlayToEnd:(TYAudioUnitPlayer *)player;
+
+@end
+
 @interface TYAudioUnitPlayer : NSObject
 
-@property (nonatomic, weak) id<TYAudioUnitPlayerDataSourse> dataSource;
-
-- (instancetype)initWithAsbd:(AudioStreamBasicDescription)asbd;
-
-- (void)startPlay;
-- (void)stopPlay;
+- (instancetype)initWithAudioFilePath:(NSString *)audioFilePath;
+@property (nonatomic, weak) id<TYPlayerDelegate> delegate;
+- (void)play;
+- (double)getCurrentTime;
 
 @end
 
