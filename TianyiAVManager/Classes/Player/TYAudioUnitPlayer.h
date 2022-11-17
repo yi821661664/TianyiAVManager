@@ -1,28 +1,33 @@
 //
 //  TYAudioUnitPlayer.h
-//  TianyiAVManager
+//  TianyiFunc
 //
-//  Created by 易召强 on 2022/11/14.
+//  Created by 易召强 on 2022/11/7.
 //
 
 #import <Foundation/Foundation.h>
+#import <AVFoundation/AVFoundation.h>
+
+@class TYAudioUnitPlayer;
+
+typedef void (^TYInputBlock)(AudioBufferList * _Nonnull bufferList);
+typedef void (^TYInputBlockFull)(TYAudioUnitPlayer * _Nonnull player,
+                                 AudioUnitRenderActionFlags * _Nonnull ioActionFlags,
+                                 const AudioTimeStamp * _Nonnull inTimeStamp,
+                                 UInt32 inBusNumber,
+                                 UInt32 inNumberFrames,
+                                 AudioBufferList * _Nonnull ioData);
 
 NS_ASSUME_NONNULL_BEGIN
 
-
-@class TYAudioUnitPlayer;
-@protocol TYPlayerDelegate <NSObject>
-
-- (void)onPlayToEnd:(TYAudioUnitPlayer *)player;
-
-@end
-
 @interface TYAudioUnitPlayer : NSObject
 
-- (instancetype)initWithAudioFilePath:(NSString *)audioFilePath;
-@property (nonatomic, weak) id<TYPlayerDelegate> delegate;
-- (void)play;
-- (double)getCurrentTime;
+@property (nonatomic,copy) TYInputBlock inputBlock;
+@property (nonatomic,copy) TYInputBlockFull inputFullBlock;
+- (void)initWithSampleRate:(UInt32)sampleRate bitsPerChannel:(UInt32)bitsPerChannel;
+- (void)start;
+- (void)stop;
+- (void)destroy;
 
 @end
 

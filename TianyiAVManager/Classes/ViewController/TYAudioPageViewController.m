@@ -9,6 +9,7 @@
 #import "TYAudioRecorder.h"
 #import "TYAudioPlayer.h"
 #import "TYAudioRecorder.h"
+#import "AudioSoundTouchOperation.h"
 
 //音频波形图
 //变声处理
@@ -44,6 +45,9 @@ typedef enum : NSUInteger {
 @property(nonatomic, strong) NSMutableArray <UIButton *>*btnsArr;
 @property(nonatomic, copy)   NSString *recordPcmPath;
 
+@property(nonatomic, copy)   NSString *tempPath;
+@property(nonatomic, strong) NSOperationQueue *myAudioQue;
+
 @end
 
 @implementation TYAudioPageViewController
@@ -66,16 +70,16 @@ typedef enum : NSUInteger {
     UIView *lastV = [self setupUI:self.recordTypeArr atIndex:self.recordType topView:nil];
     lastV = [self setupUI:self.audioDemoArr atIndex:self.demoType topView:lastV];
     lastV = [self setupUI:self.audioDecordArr atIndex:self.decordtype topView:lastV];
-
+    
     [self.view addSubview:self.recordBtn];
     [self.view addSubview:self.playRecordBtn];
     [self.view addSubview:self.playDemoBtn];
     [self.view addSubview:self.decordBtn];
     [self.view addSubview:self.playPCMBtn];
-
+    
     [self.view addSubview:self.samplePointLb];
     self.samplePointLb.hidden = YES;
-
+    
     [self.recordBtn mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.mas_equalTo(lastV.mas_bottom).offset(20);
         make.left.mas_equalTo(lastV);
@@ -110,9 +114,10 @@ typedef enum : NSUInteger {
         make.top.mas_equalTo(self.playPCMBtn.mas_bottom).offset(20);
         make.left.mas_equalTo(lastV);
     }];
-
+    
     NSString *directory = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) lastObject];
     _recordPcmPath = [directory stringByAppendingPathComponent:@"TYRecord/record.pcm"];
+    _tempPath = [directory stringByAppendingPathComponent:@"TYRecord/ttttRecord.mp3"];
     NSFileManager *fileManager = [NSFileManager defaultManager];
     if ([fileManager fileExistsAtPath:self.recordPcmPath]) {
         _playRecordBtn.enabled = YES;
@@ -124,7 +129,7 @@ typedef enum : NSUInteger {
 }
 
 - (void)dealloc {
-//    [[TYAudioPlayer shared] stop];
+    //    [[TYAudioPlayer shared] stop];
 }
 
 - (UIView *)setupUI:(NSArray *)arr atIndex:(NSInteger)atIndex topView:(UIView *)topView {
@@ -181,6 +186,25 @@ typedef enum : NSUInteger {
 // 音频基础以及相关文档介绍
 - (void)helpBtnOnClick:(UIButton *)sender {
     NSLog(@"====");
+    
+    NSString*fff = [TYBaseTool getFilePath:@"audio/告五人 - 爱人错过" type:@"mp3" bundleName:@"TianyiAVManager"];
+    AudioSoundTouchOperation *soundTouch = [[AudioSoundTouchOperation alloc] initWithTarget:self
+                                                                                     action:@selector(soundTouchFinish:)
+                                                                                 sourcePath:fff
+                                                                            audioOutputPath:_tempPath
+                                                                            audioSampleRate:48000
+                                                                           audioTempoChange:0
+                                                                                 audioPitch:10
+                                                                                  audioRate:0
+                                                                              audioChannels:2];
+    [[self myAudioQue] cancelAllOperations];
+    [[self myAudioQue] addOperation:soundTouch];
+}
+
+- (void)soundTouchFinish:(NSString *)stPath {
+    [TYAudioPlayer playAudioWith:stPath type:TYAudioPlayType_audioUnit finish:^{
+
+    }];
 }
 
 - (void)btnOnClick:(UIButton *)sender {
@@ -371,6 +395,14 @@ typedef enum : NSUInteger {
         [_playDemoBtn addTarget:self action:@selector(playDemoBtnOnClick:) forControlEvents:UIControlEventTouchUpInside];
     }
     return _playDemoBtn;
+}
+
+- (NSOperationQueue *)myAudioQue {
+    if (!_myAudioQue) {
+        _myAudioQue = [[NSOperationQueue alloc] init];
+        _myAudioQue.maxConcurrentOperationCount = 1;
+    }
+    return _myAudioQue;
 }
 
 @end

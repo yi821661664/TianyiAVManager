@@ -9,6 +9,7 @@
 #import "TYAudioSystemPlayer.h"
 #import "TYAudioQueuePlayer.h"
 #import "TYAudioUnitPlayer.h"
+#import "TYAudioUnitReader.h"
 
 @interface TYAudioPlayer()
 
@@ -18,6 +19,8 @@
 @property(nonatomic, copy) TYAudioPlayerProgressBlock progress;
 @property(nonatomic, strong) TYAudioQueuePlayer *queuePlayer;
 @property(nonatomic, strong) TYAudioUnitPlayer *unitPlayer;
+@property(nonatomic, strong) TYAudioUnitReader *unitReader;
+@property(nonatomic, strong) NSData *unitDataStore;
 
 @end
 
@@ -42,6 +45,9 @@
 
 + (void)stopAllAuido {
     [TYAudioManager stopAllAudio];
+    if (self.shared.unitPlayer) {
+        [self.shared.unitPlayer stop];
+    }
 }
 
 + (TYAudioPlayer *)shared {
@@ -61,8 +67,29 @@
     // pcm数据的播放才考虑audioUnit,audioqueue播放，不考虑播放进度的回调
     if ([[self.path pathExtension] isEqualToString:@"pcm"]) {
         if (self.type == TYAudioPlayType_audioUnit) {
-            self.unitPlayer = [[TYAudioUnitPlayer alloc] initWithAudioFilePath:self.path];
-            [self.unitPlayer play];
+            self.unitDataStore = [NSData dataWithContentsOfFile:self.path];
+            if (!self.unitPlayer) {
+                self.unitPlayer = [TYAudioUnitPlayer new];
+                self.unitReader = [TYAudioUnitReader new];
+            }
+            [self.unitPlayer initWithSampleRate:48000 bitsPerChannel:2];
+            if (self.unitPlayer.inputBlock == nil) {
+                typeof(self) __weak weakSelf = self;
+                self.unitPlayer.inputBlock = ^(AudioBufferList *bufferList) {
+                    AudioBuffer buffer = bufferList->mBuffers[0];
+                    int len = buffer.mDataByteSize;
+                    int readLen = [weakSelf.unitReader readDataFrom:weakSelf.unitDataStore len:len forData:buffer.mData];
+                    buffer.mDataByteSize = readLen;
+                    if (readLen == 0) {
+                        [weakSelf.unitPlayer stop];
+                        NSLog(@"播放完成");
+                        if (weakSelf.finish) {
+                            weakSelf.finish();
+                        }
+                    }
+                };
+            }
+            [self.unitPlayer start];
         } else {
             self.queuePlayer = [[TYAudioQueuePlayer alloc] initWithAudioFilePath:self.path];
             [self.queuePlayer startPlay];

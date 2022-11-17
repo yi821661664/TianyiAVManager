@@ -5,8 +5,6 @@
 //  Created by 易召强 on 2022/11/14.
 //
 
-//AudioUnitSetParameter(self.ioUnit, kNewTimePitchParam_Pitch, kAudioUnitScope_Global, 0, self.pitchShift, 0);
-
 #import "TYAudioUnitRecorder.h"
 
 #pragma mark --audioEncodeParam

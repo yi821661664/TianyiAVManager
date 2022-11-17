@@ -1,212 +1,122 @@
 //
 //  TYAudioUnitPlayer.m
-//  TianyiAVManager
+//  TianyiFunc
 //
-//  Created by 易召强 on 2022/11/14.
+//  Created by 易召强 on 2022/11/7.
 //
 
 #import "TYAudioUnitPlayer.h"
-#import <AudioUnit/AudioUnit.h>
-#import <AVFoundation/AVFoundation.h>
-#import <assert.h>
-#import <TianyiUIEngine/TYBaseTool.h>
 
-const uint32_t CONST_BUFFER_SIZE = 0x10000;
-
-#define INPUT_BUS 1
-#define OUTPUT_BUS 0
-
-@interface TYAudioUnitPlayer()
-
-@property(nonatomic, copy) NSString *filePath;
+@interface TYAudioUnitPlayer() {
+    AudioUnit audioUnit;
+}
 
 @end
 
 @implementation TYAudioUnitPlayer
-{
-    AudioUnit audioUnit;
-    AudioBufferList *buffList;
-    NSInputStream *inputSteam;
+
+- (void)destroy {
+    if (audioUnit) {
+        OSStatus status;
+        status = AudioComponentInstanceDispose(audioUnit);
+        CheckError(status, "audioUnit释放失败");
+    }
 }
 
-- (void)play {
-    [self initPlayer];
-    AudioOutputUnitStart(audioUnit);
-}
-
-
-- (double)getCurrentTime {
-    Float64 timeInterval = 0;
-    if (inputSteam) {
-        
+static OSStatus outputCallBackFun(void *                          inRefCon,
+                                  AudioUnitRenderActionFlags *    ioActionFlags,
+                                  const AudioTimeStamp *          inTimeStamp,
+                                  UInt32                          inBusNumber,
+                                  UInt32                          inNumberFrames,
+                                  AudioBufferList * __nullable    ioData) {
+    memset(ioData->mBuffers[0].mData, 0, ioData->mBuffers[0].mDataByteSize);
+    
+    TYAudioUnitPlayer *player = (__bridge TYAudioUnitPlayer *)(inRefCon);
+    typeof(player) __weak weakPlayer = player;
+    if (player.inputBlock) {
+        player.inputBlock(ioData);
     }
-    
-    return timeInterval;
-}
-
-- (instancetype)initWithAudioFilePath:(NSString *)audioFilePath {
-    self = [super init];
-    if (self) {
-        _filePath = audioFilePath;
-    }
-    return self;
-}
-
-
-- (void)initPlayer {
-    // open pcm stream
-    NSURL *url = [NSURL fileURLWithPath:_filePath];
-    inputSteam = [NSInputStream inputStreamWithURL:url];
-    if (!inputSteam) {
-        NSLog(@"打开文件失败 %@", url);
-    }
-    else {
-        [inputSteam open];
-    }
-    
-    NSError *error = nil;
-    OSStatus status = noErr;
-    
-    // set audio session
-    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
-    [audioSession setCategory:AVAudioSessionCategoryPlayback error:&error];
-    
-    AudioComponentDescription audioDesc;
-    audioDesc.componentType = kAudioUnitType_Output;
-    audioDesc.componentSubType = kAudioUnitSubType_RemoteIO;
-    audioDesc.componentManufacturer = kAudioUnitManufacturer_Apple;
-    audioDesc.componentFlags = 0;
-    audioDesc.componentFlagsMask = 0;
-    
-    AudioComponent inputComponent = AudioComponentFindNext(NULL, &audioDesc);
-    AudioComponentInstanceNew(inputComponent, &audioUnit);
-    
-    // buffer
-    buffList = (AudioBufferList *)malloc(sizeof(AudioBufferList));
-    buffList->mNumberBuffers = 1;
-    buffList->mBuffers[0].mNumberChannels = 1;
-    buffList->mBuffers[0].mDataByteSize = CONST_BUFFER_SIZE;
-    buffList->mBuffers[0].mData = malloc(CONST_BUFFER_SIZE);
-    
-    //audio property
-    UInt32 flag = 1;
-    if (flag) {
-        status = AudioUnitSetProperty(audioUnit,
-                                      kAudioOutputUnitProperty_EnableIO,
-                                      kAudioUnitScope_Output,
-                                      OUTPUT_BUS,
-                                      &flag,
-                                      sizeof(flag));
-    }
-    if (status) {
-        NSLog(@"AudioUnitSetProperty error with status:%d", status);
-    }
-    
-    // format
-    AudioStreamBasicDescription outputFormat;
-    memset(&outputFormat, 0, sizeof(outputFormat));
-    outputFormat.mSampleRate       = 48000; // 采样率
-    outputFormat.mFormatID         = kAudioFormatLinearPCM; // PCM格式
-    outputFormat.mFormatFlags      = kLinearPCMFormatFlagIsSignedInteger; // 整形
-    outputFormat.mFramesPerPacket  = 1; // 每帧只有1个packet
-    outputFormat.mChannelsPerFrame = 2; // 声道数
-    outputFormat.mBytesPerFrame    = 2; // 每帧只有2个byte 声道*位深*Packet数
-    outputFormat.mBytesPerPacket   = 2; // 每个Packet只有2个byte
-    outputFormat.mBitsPerChannel   = 16; // 位深
-    [self printAudioStreamBasicDescription:outputFormat];
-
-    status = AudioUnitSetProperty(audioUnit,
-                                  kAudioUnitProperty_StreamFormat,
-                                  kAudioUnitScope_Input,
-                                  OUTPUT_BUS,
-                                  &outputFormat,
-                                  sizeof(outputFormat));
-    if (status) {
-        NSLog(@"AudioUnitSetProperty eror with status:%d", status);
-    }
-    
-    
-    // callback
-    AURenderCallbackStruct playCallback;
-    playCallback.inputProc = PlayCallback;
-    playCallback.inputProcRefCon = (__bridge void *)self;
-    AudioUnitSetProperty(audioUnit,
-                         kAudioUnitProperty_SetRenderCallback,
-                         kAudioUnitScope_Input,
-                         OUTPUT_BUS,
-                         &playCallback,
-                         sizeof(playCallback));
-    
-    
-    OSStatus result = AudioUnitInitialize(audioUnit);
-    NSLog(@"result %d", result);
-}
-
-
-static OSStatus PlayCallback(void *inRefCon,
-                             AudioUnitRenderActionFlags *ioActionFlags,
-                             const AudioTimeStamp *inTimeStamp,
-                             UInt32 inBusNumber,
-                             UInt32 inNumberFrames,
-                             AudioBufferList *ioData) {
-    TYAudioUnitPlayer *player = (__bridge TYAudioUnitPlayer *)inRefCon;
-    
-    ioData->mBuffers[0].mDataByteSize = (UInt32)[player->inputSteam read:ioData->mBuffers[0].mData maxLength:(NSInteger)ioData->mBuffers[0].mDataByteSize];;
-    NSLog(@"out size: %d", ioData->mBuffers[0].mDataByteSize);
-    
-    if (ioData->mBuffers[0].mDataByteSize <= 0) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [player stop];
-        });
+    if (player.inputFullBlock) {
+        player.inputFullBlock(weakPlayer, ioActionFlags, inTimeStamp, inBusNumber, inNumberFrames, ioData);
     }
     return noErr;
 }
 
+- (void)initWithSampleRate:(UInt32)sampleRate bitsPerChannel:(UInt32)bitsPerChannel {
+    //初始化audioUnit
+    AudioComponentDescription outputDesc;
+    outputDesc.componentType = kAudioUnitType_Output;
+    outputDesc.componentSubType = kAudioUnitSubType_VoiceProcessingIO;
+    outputDesc.componentManufacturer = kAudioUnitManufacturer_Apple;
+    outputDesc.componentFlags = 0;
+    outputDesc.componentFlagsMask = 0;
+    
+    AudioComponent outputComponent = AudioComponentFindNext(NULL, &outputDesc);
+    AudioComponentInstanceNew(outputComponent, &audioUnit);
+
+    //设置输出格式
+    AudioStreamBasicDescription streamDesc;
+    memset(&streamDesc, 0, sizeof(streamDesc));
+    streamDesc.mSampleRate       = sampleRate;
+    streamDesc.mFormatID         = kAudioFormatLinearPCM;
+    streamDesc.mFormatFlags      = (kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsNonInterleaved);
+    streamDesc.mFramesPerPacket  = 1;
+    streamDesc.mChannelsPerFrame = bitsPerChannel;
+    streamDesc.mBitsPerChannel   = 16;
+    streamDesc.mBytesPerFrame    = 16 * bitsPerChannel / 8;
+    streamDesc.mBytesPerPacket   = 16 * bitsPerChannel / 8 * 1;
+
+    OSStatus status = AudioUnitSetProperty(audioUnit,
+                                           kAudioUnitProperty_StreamFormat,
+                                           kAudioUnitScope_Input,
+                                           0,
+                                           &streamDesc,
+                                           sizeof(streamDesc));
+    CheckError(status, "SetProperty StreamFormat failure");
+
+    //设置回调
+    AURenderCallbackStruct outputCallBackStruct;
+    outputCallBackStruct.inputProc = outputCallBackFun;
+    outputCallBackStruct.inputProcRefCon = (__bridge void * _Nullable)(self);
+    status = AudioUnitSetProperty(audioUnit,
+                                  kAudioUnitProperty_SetRenderCallback,
+                                  kAudioUnitScope_Input,
+                                  0,
+                                  &outputCallBackStruct,
+                                  sizeof(outputCallBackStruct));
+    CheckError(status, "SetProperty EnableIO failure");
+    
+//    AudioUnitSetParameter(self->audioUnit, kNewTimePitchParam_Pitch, kAudioUnitScope_Global, 0, 80, 0);
+}
+
+- (void)start {
+    [self stop];
+    AudioOutputUnitStart(audioUnit);
+}
 
 - (void)stop {
-    AudioOutputUnitStop(audioUnit);
-    if (buffList != NULL) {
-        if (buffList->mBuffers[0].mData) {
-            free(buffList->mBuffers[0].mData);
-            buffList->mBuffers[0].mData = NULL;
-        }
-        free(buffList);
-        buffList = NULL;
+    if (audioUnit == nil) {
+        return;
     }
-    
-    if (self.delegate && [self.delegate respondsToSelector:@selector(onPlayToEnd:)]) {
-        __strong typeof (TYAudioUnitPlayer) *player = self;
-        [self.delegate onPlayToEnd:player];
-    }
-    
-    [inputSteam close];
+    OSStatus status;
+    status = AudioOutputUnitStop(audioUnit);
+    CheckError(status, "audioUnit停止失败");
 }
 
-- (void)dealloc {
-    AudioOutputUnitStop(audioUnit);
-    AudioUnitUninitialize(audioUnit);
-    AudioComponentInstanceDispose(audioUnit);
-    
-    if (buffList != NULL) {
-        free(buffList);
-        buffList = NULL;
-    }
+void CheckError(OSStatus error, const char *operation) {
+    if (error == noErr) return;
+    char errorString[20];
+    // See if it appears to be a 4-char-code
+    *(UInt32 *)(errorString + 1) = CFSwapInt32HostToBig(error);
+    if (isprint(errorString[1]) && isprint(errorString[2]) &&
+        isprint(errorString[3]) && isprint(errorString[4])) {
+        errorString[0] = errorString[5] = '\'';
+        errorString[6] = '\0';
+    } else
+        // No, format it as an integer
+        sprintf(errorString, "%d", (int)error);
+    fprintf(stderr, "Error: %s (%s)\n", operation, errorString);
+    exit(1);
 }
 
-
-- (void)printAudioStreamBasicDescription:(AudioStreamBasicDescription)asbd {
-    char formatID[5];
-    UInt32 mFormatID = CFSwapInt32HostToBig(asbd.mFormatID);
-    bcopy (&mFormatID, formatID, 4);
-    formatID[4] = '\0';
-    printf("Sample Rate:         %10.0f\n",  asbd.mSampleRate);
-    printf("Format ID:           %10s\n",    formatID);
-    printf("Format Flags:        %10X\n",    (unsigned int)asbd.mFormatFlags);
-    printf("Bytes per Packet:    %10d\n",    (unsigned int)asbd.mBytesPerPacket);
-    printf("Frames per Packet:   %10d\n",    (unsigned int)asbd.mFramesPerPacket);
-    printf("Bytes per Frame:     %10d\n",    (unsigned int)asbd.mBytesPerFrame);
-    printf("Channels per Frame:  %10d\n",    (unsigned int)asbd.mChannelsPerFrame);
-    printf("Bits per Channel:    %10d\n",    (unsigned int)asbd.mBitsPerChannel);
-    printf("\n");
-}
 @end
