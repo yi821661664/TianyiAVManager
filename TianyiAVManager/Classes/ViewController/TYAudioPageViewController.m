@@ -10,6 +10,7 @@
 #import "TYAudioPlayer.h"
 #import "TYAudioRecorder.h"
 #import "AudioSoundTouchOperation.h"
+#import "AudioConvert.h"
 
 //音频波形图
 //变声处理
@@ -188,13 +189,23 @@ typedef enum : NSUInteger {
     NSLog(@"====");
     
     NSString*fff = [TYBaseTool getFilePath:@"audio/告五人 - 爱人错过" type:@"mp3" bundleName:@"TianyiAVManager"];
+    AudioConvertConfig dconfig;
+    dconfig.sourceAuioPath = [p UTF8String];
+    dconfig.outputFormat = AudioConvertOutputFormat_MP3;
+    dconfig.outputChannelsPerFrame = 1;
+    dconfig.outputSampleRate = 22050;
+    dconfig.soundTouchPitch = pitchSemiTonesNum;
+    dconfig.soundTouchRate = rateChangeNum;
+    dconfig.soundTouchTempoChange = tempoChangeNum;
+    [[AudioConvert shareAudioConvert] audioConvertBegin:dconfig withCallBackDelegate:self];
+    
     AudioSoundTouchOperation *soundTouch = [[AudioSoundTouchOperation alloc] initWithTarget:self
                                                                                      action:@selector(soundTouchFinish:)
                                                                                  sourcePath:fff
                                                                             audioOutputPath:_tempPath
                                                                             audioSampleRate:48000
                                                                            audioTempoChange:0
-                                                                                 audioPitch:10
+                                                                                 audioPitch:2
                                                                                   audioRate:0
                                                                               audioChannels:2];
     [[self myAudioQue] cancelAllOperations];
