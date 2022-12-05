@@ -201,7 +201,7 @@ typedef enum : NSUInteger {
         startIndex = TYAudioRecordType_system;
         endIndex = self.recordTypeArr.count;
         self.recordType = tag;
-    } else if (tag < self.soundTouchType) {
+    } else if (tag < TYAudioPagesoundTouchType_Demo) {
         startIndex = TYAudioPageEncordType_PCM_AAC;
         endIndex = startIndex + self.audioEncordArr.count;
         self.encordtype = tag;

@@ -7,6 +7,7 @@
 
 #import "TYMediaHomePageViewController.h"
 #import "TYAudioPageViewController.h"
+#import "TYVideoPageViewController.h"
 
 @interface TYMediaHomePageViewController ()
 
@@ -18,7 +19,7 @@
     [super viewDidLoad];
     self.delegate = self;
     self.title = @"音视频相关";
-    self.funcsList = @[@"音频编解码",@"视频编解码",@"摄像实时解码",@"直播推流"];
+    self.funcsList = @[@"音频编解码",@"视频编解码",@"直播推流"];
     self.backBtn.hidden = NO;
 }
 
@@ -33,7 +34,7 @@
             vc = [[TYAudioPageViewController alloc] init];
             break;
         case 1:
-            
+            vc = [[TYVideoPageViewController alloc] init];
             break;
         case 2:
             
