@@ -19,7 +19,7 @@
 }
 
 - (void)setupUI {
-    self.title = @"音频编码与解码";
+    self.title = @"视频编解码";
     self.backBtn.hidden = NO;
     self.helpBtn.hidden = NO;
 }

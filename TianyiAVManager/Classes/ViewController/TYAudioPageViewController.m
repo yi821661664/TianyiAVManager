@@ -12,6 +12,10 @@
 #import "AudioSoundTouchOperation.h"
 #import "AudioDecodeOperation.h"
 #import <TianyiUIEngine/TYHud.h>
+#import "TYEncordView.h"
+#import "TYRecordView.h"
+#import "TYEZAudioView.h"
+#import "TYSoundTouchView.h"
 
 typedef enum : NSUInteger {
     TYAudioPageEncordType_PCM_AAC = 3,     // PCM 数据流 -> AAC音频
@@ -19,34 +23,26 @@ typedef enum : NSUInteger {
     TYAudioPageEncordType_PCM_WAV,      // PCM 数据流 -> WAV音频
 } TYAudioPageEncordType;
 
-typedef enum : NSUInteger {
-    TYAudioPagesoundTouchType_Demo = 6,     // 示例音频
-    TYAudioPagesoundTouchType_Record,       // 录音PCM文件
-} TYAudioPagesoundTouchType;
-
 @interface TYAudioPageViewController ()
+
+@property(nonatomic, strong) UIScrollView *scroll;
+@property(nonatomic, strong) TYEZAudioView *ezAudioContentView;  // 音谱
+@property(nonatomic, strong) TYSoundTouchView *touchContentView;    // 变声器
+@property(nonatomic, strong) TYRecordView *recordContentView;   // 多种录音
+@property(nonatomic, strong) TYEncordView *encordContentView;   // 编解码
 
 @property(nonatomic, strong) UIButton *recordBtn;  // 录音按钮
 @property(nonatomic, strong) UIButton *playRecordBtn;    // 播放录音按钮
 @property(nonatomic, strong) UIButton *encordBtn;  // 解码按钮
 @property(nonatomic, strong) UIButton *playPCMBtn; // 播放PCM数据
-@property(nonatomic, strong) UIButton *soundTouchBtn;  // 播放变音文件
-@property(nonatomic, strong) UISlider *soundTouchSlider;  // 用于调整变声器的数值
 
 @property(nonatomic, assign) BOOL hasRecordFile;
 @property(nonatomic, assign) TYAudioRecordType recordType;
 @property(nonatomic, assign) TYAudioPageEncordType encordtype;
-@property(nonatomic, assign) TYAudioPagesoundTouchType soundTouchType;
 @property(nonatomic, strong) NSArray <NSString *>*recordTypeArr;
 @property(nonatomic, strong) NSArray <NSString *>*audioEncordArr;
-@property(nonatomic, strong) NSArray <NSString *>*soundTouchArr;
 @property(nonatomic, strong) NSMutableArray <UIButton *>*btnsArr;
-@property(nonatomic, strong) NSOperationQueue *myAudioQue;
 @property(nonatomic, weak)   UIView *lastV;
-
-@property(nonatomic, copy)   NSString *recordPcmPath;  // 录音后形成的PCM文件路径
-@property(nonatomic, copy)   NSString *tempPath;  // 音频文件编码成WAV后的路径
-@property(nonatomic, copy)   NSString *soundTouchPath;  //编码成WAV后文件变声的路径
 
 @end
 
@@ -55,31 +51,56 @@ typedef enum : NSUInteger {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"音频编码与解码";
-    self.recordTypeArr = @[@"系统高级Api录音",@"AudioUnit录音",@"AudioQueue录音"];
-    self.audioEncordArr = @[@"PCM->AAC音频",@"PCM->MP3音频",@"PCM->WAV音频"];
-    self.soundTouchArr = @[@"示例音频变声",@"录音音频变声"];
-    self.btnsArr = @[].mutableCopy;
-    [self checkRecordFileInfo];
+    [self setupUI];
+    
+//    self.recordTypeArr = @[@"系统高级Api录音",@"AudioUnit录音",@"AudioQueue录音"];
+//    self.audioEncordArr = @[@"PCM->AAC音频",@"PCM->MP3音频",@"PCM->WAV音频"];
+//    self.soundTouchArr = @[@"示例音频变声",@"录音音频变声"];
+//    self.btnsArr = @[].mutableCopy;
+//    [self checkRecordFileInfo];
     self.backBtn.hidden = NO;
     self.helpBtn.hidden = NO;
-    self.recordType = TYAudioRecordType_system;
-    self.encordtype = TYAudioPageEncordType_PCM_AAC;
-    self.soundTouchType = TYAudioPagesoundTouchType_Demo;
-    self.lastV = [self setupUI:self.recordTypeArr atIndex:self.recordType topView:nil];
-    if (_hasRecordFile) {
-        self.lastV = [self setupUI:self.audioEncordArr atIndex:self.encordtype topView:self.lastV];
-        [self setupUI:self.soundTouchArr atIndex:self.soundTouchType topView:self.lastV];
-    }
+//    self.recordType = TYAudioRecordType_system;
+//    self.encordtype = TYAudioPageEncordType_PCM_AAC;
+//    self.soundTouchType = TYAudioPagesoundTouchType_Demo;
+//    self.lastV = [self setupUI:self.recordTypeArr atIndex:self.recordType topView:nil];
+//    if (_hasRecordFile) {
+//        self.lastV = [self setupUI:self.audioEncordArr atIndex:self.encordtype topView:self.lastV];
+//        [self setupUI:self.soundTouchArr atIndex:self.soundTouchType topView:self.lastV];
+//    }
+}
+
+- (void)setupUI {
+    CGFloat height = .0;
+    
+    self.recordContentView = [[TYRecordView alloc] initWithFrame:CGRectZero];
+    self.recordContentView.frame = CGRectMake(0, 0, SCREEN_WIDTH, self.recordContentView.contentHeight);
+    height += self.recordContentView.contentHeight;
+    
+    self.touchContentView = [[TYSoundTouchView alloc] initWithFrame:CGRectZero];
+    self.touchContentView.frame = CGRectMake(0, height, SCREEN_WIDTH, self.touchContentView.contentHeight);
+    height += self.touchContentView.contentHeight;
+    
+    self.ezAudioContentView = [[TYEZAudioView alloc] initWithFrame:CGRectZero];
+    self.ezAudioContentView.frame = CGRectMake(0, height, SCREEN_WIDTH, self.ezAudioContentView.contentHeight);
+    height += self.ezAudioContentView.contentHeight;
+    
+    self.encordContentView = [[TYEncordView alloc] initWithFrame:CGRectZero];
+    self.encordContentView.frame = CGRectMake(0, height, SCREEN_WIDTH, self.encordContentView.contentHeight);
+    height += self.encordContentView.contentHeight;
+    
+    self.scroll.contentSize = CGSizeMake(0, height);
+    self.scroll.frame = [UIScreen mainScreen].bounds;
+    [self.scroll addSubview:self.recordContentView];
+    [self.scroll addSubview:self.touchContentView];
+    [self.scroll addSubview:self.ezAudioContentView];
+    [self.scroll addSubview:self.encordContentView];
+    [self.view addSubview:self.scroll];
 }
 
 /// 检查本地是否已有录音好的PCM文件
 - (void)checkRecordFileInfo {
-    NSString *directory = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) lastObject];
-    _recordPcmPath = [directory stringByAppendingPathComponent:@"TYRecord/record.pcm"];
-    _tempPath = [directory stringByAppendingPathComponent:@"TYRecord/ttttRecord.wav"];
-    _soundTouchPath = [directory stringByAppendingPathComponent:@"TYRecord/stRecord.wav"];
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    _hasRecordFile = [fileManager fileExistsAtPath:self.recordPcmPath];
+    
 }
 
 - (void)dealloc {
@@ -154,23 +175,6 @@ typedef enum : NSUInteger {
             make.height.mas_equalTo(40);
         }];
         lastView = self.encordBtn;
-    } else {
-        [self.view addSubview:self.soundTouchSlider];
-        [self.view addSubview:self.soundTouchBtn];
-        self.soundTouchSlider.value = 0.5;
-        [self.soundTouchBtn mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.mas_equalTo(lastView.mas_bottom).offset(20);
-            make.right.mas_equalTo(-20);
-            make.width.mas_equalTo((SCREEN_WIDTH-56)/3.0);
-            make.height.mas_equalTo(40);
-        }];
-        [self.soundTouchSlider mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.centerY.mas_equalTo(self.soundTouchBtn);
-            make.left.mas_equalTo(self.recordBtn);
-            make.right.mas_equalTo(self.soundTouchBtn.mas_left).offset(-10);
-            make.height.mas_equalTo(40);
-        }];
-        lastView = self.soundTouchBtn;
     }
     
     UIView *line = [UIView new];
@@ -201,14 +205,6 @@ typedef enum : NSUInteger {
         startIndex = TYAudioRecordType_system;
         endIndex = self.recordTypeArr.count;
         self.recordType = tag;
-    } else if (tag < TYAudioPagesoundTouchType_Demo) {
-        startIndex = TYAudioPageEncordType_PCM_AAC;
-        endIndex = startIndex + self.audioEncordArr.count;
-        self.encordtype = tag;
-    } else {
-        startIndex = TYAudioPagesoundTouchType_Demo;
-        endIndex = startIndex + self.soundTouchArr.count;
-        self.soundTouchType = tag;
     }
     for (NSInteger i = startIndex; i < endIndex; i++) {
         UIButton *btn = [self.btnsArr objectAtIndex:i];
@@ -252,7 +248,6 @@ typedef enum : NSUInteger {
         _playRecordBtn.alpha = 1;
         if (!_hasRecordFile) {
             self.lastV = [self setupUI:self.audioEncordArr atIndex:self.encordtype topView:self.lastV];
-            [self setupUI:self.soundTouchArr atIndex:self.soundTouchType topView:self.lastV];
             _hasRecordFile = YES;
         }
         [TYAudioRecorder.shared stopRecord];
@@ -265,79 +260,7 @@ typedef enum : NSUInteger {
 }
 
 - (void)playRecordBtnOnClick:(UIButton *)sender {
-    [TYAudioPlayer playAudioWith:_recordPcmPath type:TYAudioPlayType_audioUnit finish:^{
-
-    }];
-}
-
-- (void)soundTouchBtnOnClick:(UIButton *)sender {
-    [TYAudioPlayer stopAllAuido];
-    if (self.soundTouchType == TYAudioPagesoundTouchType_Demo) {
-        [self soundTouchDemo];
-    } else {
-        [self soundTouchRecord];
-    }
-}
-
-- (void)sliderValueChanged:(UISlider *)sender {
-    NSString *name = [NSString stringWithFormat:@"变声音频(%.0lf)",self.soundTouchSlider.value * 24 - 12];
-    [_soundTouchBtn setTitle:name forState:UIControlStateNormal];
-}
-
-#pragma mark - soundTouch
-- (void)soundTouchDemo {
-    [TYHud showLoading];
-    NSString*fff = [TYBaseTool getFilePath:@"audio/一生无悔高安" type:@"mp3" bundleName:@"TianyiAVManager"];
-    // 先把mp3音频转码成wav格式
-    AudioDecodeOperation *audioDecode = [[AudioDecodeOperation alloc] initWithSourcePath:fff
-                                                                         audioOutputPath:_tempPath
-                                                                        outputSampleRate:0
-                                                                           outputChannel:1
-                                                                          callBackTarget:self
-                                                                            callFunction:@selector(didDecode:)];
-    [[self myAudioQue] cancelAllOperations];
-    [[self myAudioQue] addOperation:audioDecode];
-}
-
-- (void)soundTouchRecord {
     
-}
-
-- (void)didDecode:(NSString *)tmpPath {
-    // 解码失败
-    if (!tmpPath) {
-        [TYHud disMiss];
-        [TYHud showToast:@"解码失败" duration:0 userInteraction:YES];
-        return;
-    }
-    // 进行变声处理
-    int audioPitch = audioPitch = self.soundTouchSlider.value * 24 - 12;
-    AudioSoundTouchOperation *soundTouch = [[AudioSoundTouchOperation alloc] initWithTarget:self
-                                                                                     action:@selector(soundTouchFinish:)
-                                                                                 sourcePath:tmpPath
-                                                                            audioOutputPath:_soundTouchPath
-                                                                            audioSampleRate:44100/2.0
-                                                                           audioTempoChange:0
-                                                                                 audioPitch:audioPitch
-                                                                                  audioRate:0
-                                                                              audioChannels:1];
-    [[self myAudioQue] cancelAllOperations];
-    [[self myAudioQue] addOperation:soundTouch];
-}
-
-- (void)soundTouchFinish:(NSString *)stPath {
-    [TYHud disMiss];
-    // 变声失败
-    if (!stPath) {
-        [TYHud showToast:@"变声失败" duration:0 userInteraction:YES];
-        return;
-    }
-    if([[NSFileManager defaultManager] fileExistsAtPath:stPath]) {
-        // 变声成功可以直接播放
-        [TYAudioPlayer playAudioWith:stPath type:TYAudioPlayType_system finish:^{
-
-        }];
-    }
 }
 
 #pragma mark - lazy init
@@ -385,20 +308,6 @@ typedef enum : NSUInteger {
     return _playPCMBtn;
 }
 
-- (UIButton *)soundTouchBtn {
-    if (!_soundTouchBtn) {
-        _soundTouchBtn = [UIButton new];
-        _soundTouchBtn.titleLabel.font = [UIFont systemFontOfSize:16];
-        [_soundTouchBtn setTitle:@"播放音频(0)" forState:UIControlStateNormal];
-        _soundTouchBtn.backgroundColor = [UIColor colorFromHexString:@"f6f5ec"];
-        _soundTouchBtn.layer.cornerRadius = 5.0;
-        _soundTouchBtn.clipsToBounds = YES;
-        [_soundTouchBtn setTitleColor:[UIColor colorFromHexString:@"2a5caa"] forState:UIControlStateNormal];
-        [_soundTouchBtn addTarget:self action:@selector(soundTouchBtnOnClick:) forControlEvents:UIControlEventTouchUpInside];
-    }
-    return _soundTouchBtn;
-}
-
 - (UIButton *)playRecordBtn {
     if (!_playRecordBtn) {
         _playRecordBtn = [UIButton new];
@@ -413,22 +322,13 @@ typedef enum : NSUInteger {
     return _playRecordBtn;
 }
 
-- (NSOperationQueue *)myAudioQue {
-    if (!_myAudioQue) {
-        _myAudioQue = [[NSOperationQueue alloc] init];
-        _myAudioQue.maxConcurrentOperationCount = 1;
+- (UIScrollView *)scroll {
+    if(!_scroll) {
+        _scroll = [[UIScrollView alloc] init];
+        _scroll.showsVerticalScrollIndicator = NO;
+        _scroll.showsHorizontalScrollIndicator = NO;
     }
-    return _myAudioQue;
-}
-
-- (UISlider *)soundTouchSlider {
-    if (!_soundTouchSlider) {
-        _soundTouchSlider = [[UISlider alloc] init];
-        _soundTouchSlider.maximumValue = 1.0;
-        _soundTouchSlider.minimumValue = 0.0;
-        [_soundTouchSlider addTarget:self action:@selector(sliderValueChanged:) forControlEvents:UIControlEventValueChanged];
-    }
-    return _soundTouchSlider;
+    return _scroll;
 }
 
 @end
